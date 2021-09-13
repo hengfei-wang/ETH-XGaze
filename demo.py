@@ -95,7 +95,9 @@ def normalizeData_face(img, face_model, landmarks, hr, ht, cam):
     return img_warped, landmarks_warped
 
 if __name__ == '__main__':
-    img_file_name = './example/input/cam00.JPG'
+  pose_list = [0,1,2,3,4,5,6,7,8,9]
+  for pose_num in pose_list:
+    img_file_name = f'./example/input/pose_{pose_num*4}.png'
     print('load input face image: ', img_file_name)
     image = cv2.imread(img_file_name)
 
@@ -115,7 +117,7 @@ if __name__ == '__main__':
     landmarks = np.asarray(landmarks)
 
     # load camera information
-    cam_file_name = './example/input/cam00.xml'  # this is camera calibration information file obtained with OpenCV
+    cam_file_name = f'./example/input/cam{str(pose_num).zfill(2)}.xml'  # this is camera calibration information file obtained with OpenCV
     if not os.path.isfile(cam_file_name):
         print('no camera calibration file is found.')
         exit(0)
@@ -170,6 +172,6 @@ if __name__ == '__main__':
     for (x, y) in landmarks_normalized:
         cv2.circle(img_normalized, (x, y), 5, (0, 255, 0), -1)
     face_patch_gaze = draw_gaze(img_normalized, pred_gaze_np)  # draw gaze direction on the normalized face image
-    output_path = 'example/output/results_gaze.jpg'
+    output_path = f'example/output/results_gaze_pose_{pose_num*4}.png'
     print('save output image to: ', output_path)
     cv2.imwrite(output_path, face_patch_gaze)
