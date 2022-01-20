@@ -5,3 +5,7 @@
 .idea/modules.xml
 .idea/vcs.xml
 .idea/workspace.xml
+ckpt/epoch_24_ckpt.pth.tar
+__pycache__/
+modules/__pycache__/
+example/

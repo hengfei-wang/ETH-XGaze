@@ -1,4 +1,6 @@
+from genericpath import exists
 import os
+from typing import Tuple
 import cv2
 import dlib
 from imutils import face_utils
@@ -6,6 +8,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 from model import gaze_network
+import imageio
 
 from head_pose import HeadPoseEstimator
 
@@ -95,81 +98,92 @@ def normalizeData_face(img, face_model, landmarks, hr, ht, cam):
     return img_warped, landmarks_warped
 
 if __name__ == '__main__':
-    img_file_name = './example/input/cam00.JPG'
-    print('load input face image: ', img_file_name)
-    image = cv2.imread(img_file_name)
+    rootdir = '/home/hengfei/Desktop/research/mvsnerf/results/videos'
+    scene = 'video_imgs_1'
+    output_dir = os.path.join(rootdir,scene+'_gaze')
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir, exists=True)
+    output = []
+    for img_file_name in os.listdir(os.path.join(rootdir, 'video_imgs_1')):
+        img_file_name = os.path.join(rootdir, 'video_imgs_1', img_file_name)
+        # img_file_name = './example/input/cam00.JPG'
+        print('load input face image: ', img_file_name)
+        image = cv2.imread(img_file_name)
 
-    predictor = dlib.shape_predictor('./modules/shape_predictor_68_face_landmarks.dat')
-    # face_detector = dlib.cnn_face_detection_model_v1('./modules/mmod_human_face_detector.dat')
-    face_detector = dlib.get_frontal_face_detector()  ## this face detector is not very powerful
-    detected_faces = face_detector(image, 1)
-    if len(detected_faces) == 0:
-        print('warning: no detected face')
-        exit(0)
-    print('detected one face')
-    shape = predictor(image, detected_faces[0]) ## only use the first detected face (assume that each input image only contains one face)
-    shape = face_utils.shape_to_np(shape)
-    landmarks = []
-    for (x, y) in shape:
-        landmarks.append((x, y))
-    landmarks = np.asarray(landmarks)
+        predictor = dlib.shape_predictor('./modules/shape_predictor_68_face_landmarks.dat')
+        # face_detector = dlib.cnn_face_detection_model_v1('./modules/mmod_human_face_detector.dat')
+        face_detector = dlib.get_frontal_face_detector()  ## this face detector is not very powerful
+        detected_faces = face_detector(image, 1)
+        if len(detected_faces) == 0:
+            print('warning: no detected face')
+            exit(0)
+        print('detected one face')
+        shape = predictor(image, detected_faces[0]) ## only use the first detected face (assume that each input image only contains one face)
+        shape = face_utils.shape_to_np(shape)
+        landmarks = []
+        for (x, y) in shape:
+            landmarks.append((x, y))
+        landmarks = np.asarray(landmarks)
 
-    # load camera information
-    cam_file_name = './example/input/cam00.xml'  # this is camera calibration information file obtained with OpenCV
-    if not os.path.isfile(cam_file_name):
-        print('no camera calibration file is found.')
-        exit(0)
-    fs = cv2.FileStorage(cam_file_name, cv2.FILE_STORAGE_READ)
-    camera_matrix = fs.getNode('Camera_Matrix').mat() # camera calibration information is used for data normalization
-    camera_distortion = fs.getNode('Distortion_Coefficients').mat()
+        # load camera information
+        cam_file_name = './example/input/cam00.xml'  # this is camera calibration information file obtained with OpenCV
+        if not os.path.isfile(cam_file_name):
+            print('no camera calibration file is found.')
+            exit(0)
+        fs = cv2.FileStorage(cam_file_name, cv2.FILE_STORAGE_READ)
+        camera_matrix = fs.getNode('Camera_Matrix').mat() # camera calibration information is used for data normalization
+        camera_distortion = fs.getNode('Distortion_Coefficients').mat()
 
-    print('estimate head pose')
-    # load face model
-    face_model_load = np.loadtxt('face_model.txt')  # Generic face model with 3D facial landmarks
-    landmark_use = [20, 23, 26, 29, 15, 19]  # we use eye corners and nose conners
-    face_model = face_model_load[landmark_use, :]
-    # estimate the head pose,
-    ## the complex way to get head pose information, eos library is required,  probably more accurrated
-    # landmarks = landmarks.reshape(-1, 2)
-    # head_pose_estimator = HeadPoseEstimator()
-    # hr, ht, o_l, o_r, _ = head_pose_estimator(image, landmarks, camera_matrix[cam_id])
-    ## the easy way to get head pose information, fast and simple
-    facePts = face_model.reshape(6, 1, 3)
-    landmarks_sub = landmarks[[36, 39, 42, 45, 31, 35], :]
-    landmarks_sub = landmarks_sub.astype(float)  # input to solvePnP function must be float type
-    landmarks_sub = landmarks_sub.reshape(6, 1, 2)  # input to solvePnP requires such shape
-    hr, ht = estimateHeadPose(landmarks_sub, facePts, camera_matrix, camera_distortion)
+        print('estimate head pose')
+        # load face model
+        face_model_load = np.loadtxt('face_model.txt')  # Generic face model with 3D facial landmarks
+        landmark_use = [20, 23, 26, 29, 15, 19]  # we use eye corners and nose conners
+        face_model = face_model_load[landmark_use, :]
+        # estimate the head pose,
+        ## the complex way to get head pose information, eos library is required,  probably more accurrated
+        # landmarks = landmarks.reshape(-1, 2)
+        # head_pose_estimator = HeadPoseEstimator()
+        # hr, ht, o_l, o_r, _ = head_pose_estimator(image, landmarks, camera_matrix[cam_id])
+        ## the easy way to get head pose information, fast and simple
+        facePts = face_model.reshape(6, 1, 3)
+        landmarks_sub = landmarks[[36, 39, 42, 45, 31, 35], :]
+        landmarks_sub = landmarks_sub.astype(float)  # input to solvePnP function must be float type
+        landmarks_sub = landmarks_sub.reshape(6, 1, 2)  # input to solvePnP requires such shape
+        hr, ht = estimateHeadPose(landmarks_sub, facePts, camera_matrix, camera_distortion)
 
-    # data normalization method
-    print('data normalization, i.e. crop the face image')
-    img_normalized, landmarks_normalized = normalizeData_face(image, face_model, landmarks_sub, hr, ht, camera_matrix)
+        # data normalization method
+        print('data normalization, i.e. crop the face image')
+        img_normalized, landmarks_normalized = normalizeData_face(image, face_model, landmarks_sub, hr, ht, camera_matrix)
 
-    print('load gaze estimator')
-    model = gaze_network()
-    model.cuda() # comment this line out if you are not using GPU
-    pre_trained_model_path = './ckpt/epoch_24_ckpt.pth.tar'
-    if not os.path.isfile(pre_trained_model_path):
-        print('the pre-trained gaze estimation model does not exist.')
-        exit(0)
-    else:
-        print('load the pre-trained model: ', pre_trained_model_path)
-    ckpt = torch.load(pre_trained_model_path)
-    model.load_state_dict(ckpt['model_state'], strict=True)  # load the pre-trained model
-    model.eval()  # change it to the evaluation mode
-    input_var = img_normalized[:, :, [2, 1, 0]]  # from BGR to RGB
-    input_var = trans(input_var)
-    input_var = torch.autograd.Variable(input_var.float().cuda())
-    input_var = input_var.view(1, input_var.size(0), input_var.size(1), input_var.size(2))  # the input must be 4-dimension
-    pred_gaze = model(input_var)  # get the output gaze direction, this is 2D output as pitch and raw rotation
-    pred_gaze = pred_gaze[0] # here we assume there is only one face inside the image, then the first one is the prediction
-    pred_gaze_np = pred_gaze.cpu().data.numpy()  # convert the pytorch tensor to numpy array
+        print('load gaze estimator')
+        model = gaze_network()
+        model.cuda() # comment this line out if you are not using GPU
+        pre_trained_model_path = './ckpt/epoch_24_ckpt.pth.tar'
+        if not os.path.isfile(pre_trained_model_path):
+            print('the pre-trained gaze estimation model does not exist.')
+            exit(0)
+        else:
+            print('load the pre-trained model: ', pre_trained_model_path)
+        ckpt = torch.load(pre_trained_model_path)
+        model.load_state_dict(ckpt['model_state'], strict=True)  # load the pre-trained model
+        model.eval()  # change it to the evaluation mode
+        input_var = img_normalized[:, :, [2, 1, 0]]  # from BGR to RGB
+        input_var = trans(input_var)
+        input_var = torch.autograd.Variable(input_var.float().cuda())
+        input_var = input_var.view(1, input_var.size(0), input_var.size(1), input_var.size(2))  # the input must be 4-dimension
+        pred_gaze = model(input_var)  # get the output gaze direction, this is 2D output as pitch and raw rotation
+        pred_gaze = pred_gaze[0] # here we assume there is only one face inside the image, then the first one is the prediction
+        pred_gaze_np = pred_gaze.cpu().data.numpy()  # convert the pytorch tensor to numpy array
 
-    print('prepare the output')
-    # draw the facial landmarks
-    landmarks_normalized = landmarks_normalized.astype(int) # landmarks after data normalization
-    for (x, y) in landmarks_normalized:
-        cv2.circle(img_normalized, (x, y), 5, (0, 255, 0), -1)
-    face_patch_gaze = draw_gaze(img_normalized, pred_gaze_np)  # draw gaze direction on the normalized face image
-    output_path = 'example/output/results_gaze.jpg'
-    print('save output image to: ', output_path)
-    cv2.imwrite(output_path, face_patch_gaze)
+        print('prepare the output')
+        # draw the facial landmarks
+        landmarks_normalized = landmarks_normalized.astype(int) # landmarks after data normalization
+        for (x, y) in landmarks_normalized:
+            cv2.circle(img_normalized, (x, y), 5, (0, 255, 0), -1)
+        face_patch_gaze = draw_gaze(img_normalized, pred_gaze_np)  # draw gaze direction on the normalized face image
+        origin_img_gaze = draw_gaze(image, pred_gaze_np)
+        output.append(origin_img_gaze)
+        # output_path = f'example/output/results_gaze.jpg'
+    print('save output video to: ', output_dir)
+    # cv2.imwrite(output_path, face_patch_gaze)
+    imageio.mimwrite(f'{output_dir}/{scene}_gaze.mp4', np.stack(output), fps=10, quality=10)
