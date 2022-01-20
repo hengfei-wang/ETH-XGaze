@@ -102,9 +102,9 @@ if __name__ == '__main__':
     scene = 'video_imgs_1'
     output_dir = os.path.join(rootdir,scene+'_gaze')
     if not os.path.exists(output_dir):
-        os.mkdir(output_dir, exists=True)
+        os.mkdir(output_dir)
     output = []
-    for img_file_name in os.listdir(os.path.join(rootdir, 'video_imgs_1')):
+    for i, img_file_name in enumerate(sorted(os.listdir(os.path.join(rootdir, 'video_imgs_1')))):
         img_file_name = os.path.join(rootdir, 'video_imgs_1', img_file_name)
         # img_file_name = './example/input/cam00.JPG'
         print('load input face image: ', img_file_name)
@@ -133,6 +133,14 @@ if __name__ == '__main__':
         fs = cv2.FileStorage(cam_file_name, cv2.FILE_STORAGE_READ)
         # camera_matrix = fs.getNode('Camera_Matrix').mat() # camera calibration information is used for data normalization
         # camera_distortion = fs.getNode('Distortion_Coefficients').mat()
+        focal = 13230.734319550395/8
+        img_wh = 500
+        camera_matrix = np.eye(3)
+        camera_matrix[0,0] = focal
+        camera_matrix[1,1] = focal
+        camera_matrix[0,2] = img_wh/2
+        camera_matrix[1,2] = img_wh/2
+        camera_distortion = np.array([[0,0,0,0,0]])
 
         print('estimate head pose')
         # load face model
@@ -182,6 +190,8 @@ if __name__ == '__main__':
             cv2.circle(img_normalized, (x, y), 5, (0, 255, 0), -1)
         face_patch_gaze = draw_gaze(img_normalized, pred_gaze_np)  # draw gaze direction on the normalized face image
         origin_img_gaze = draw_gaze(image, pred_gaze_np)
+        cv2.imwrite(f'{output_dir}/{str(i).zfill(3)}.png', origin_img_gaze)
+        origin_img_gaze = cv2.cvtColor(origin_img_gaze, cv2.COLOR_BGR2RGB)
         output.append(origin_img_gaze.astype('uint8'))
         # output_path = f'example/output/results_gaze.jpg'
     print('save output video to: ', output_dir)
