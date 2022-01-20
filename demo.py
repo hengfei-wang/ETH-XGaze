@@ -131,8 +131,8 @@ if __name__ == '__main__':
             print('no camera calibration file is found.')
             exit(0)
         fs = cv2.FileStorage(cam_file_name, cv2.FILE_STORAGE_READ)
-        camera_matrix = fs.getNode('Camera_Matrix').mat() # camera calibration information is used for data normalization
-        camera_distortion = fs.getNode('Distortion_Coefficients').mat()
+        # camera_matrix = fs.getNode('Camera_Matrix').mat() # camera calibration information is used for data normalization
+        # camera_distortion = fs.getNode('Distortion_Coefficients').mat()
 
         print('estimate head pose')
         # load face model
@@ -182,7 +182,7 @@ if __name__ == '__main__':
             cv2.circle(img_normalized, (x, y), 5, (0, 255, 0), -1)
         face_patch_gaze = draw_gaze(img_normalized, pred_gaze_np)  # draw gaze direction on the normalized face image
         origin_img_gaze = draw_gaze(image, pred_gaze_np)
-        output.append(origin_img_gaze)
+        output.append(origin_img_gaze.astype('uint8'))
         # output_path = f'example/output/results_gaze.jpg'
     print('save output video to: ', output_dir)
     # cv2.imwrite(output_path, face_patch_gaze)
